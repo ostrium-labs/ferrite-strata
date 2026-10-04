@@ -1,0 +1,36 @@
+Ferrite Strata
+Copyright 2026 The Ferrite Authors
+
+This product includes software developed by The Ferrite Authors.
+
+Portions of this product may be derived from third-party open-source projects.
+Each such portion is identified in the source file header and listed below
+together with its license and attribution notice.
+
+Third-party attributions
+------------------------
+
+PJRT / OpenXLA C API (https://github.com/openxla/xla), Apache License 2.0. The
+reference design for the plugin boundary: a versioned C API with opaque
+client, compiled-executable and buffer handles, which is the same shape as the
+Strata plugin vtable. PJRT is *not* copied or linked in Phase B1. Whether
+Strata adopts the PJRT C API wholesale or defines a smaller vtable of its own
+is an open decision recorded in docs/design-notes.md; if PJRT is adopted, its
+license and notice will be added here.
+
+CubeCL (https://github.com/tracel-ai/burn), MIT License, Copyright (c) The Burn
+Authors. The closest existing design to Strata's goals, and the intended
+portable GPU backend in Phase B1. Referenced for its trait boundaries and
+compile/runtime split. No CubeCL source is copied; it is consumed as a
+dependency under its own license.
+
+Burn (https://github.com/tracel-ai/burn), MIT License, Copyright (c) The Burn
+Authors. Its separation of a device-execution trait from a graph-compilation
+trait is the closest prior art for Strata's subgraph-level vendor interface, and
+is the main input to the interface design. No Burn source is copied.
+
+cutile-rs (https://crates.io/crates/cutile-rs) and cuda-oxide
+(https://github.com/NVIDIA/cuda-rust), NVIDIA. Evaluated as optional tuned
+NVIDIA backends (Phases B3 and later). Not depended upon in Phase B1; cutile-rs
+is expected to be consumed as a published crate under its own license, and
+cuda-oxide is nightly-pinned and isolated behind an optional crate.
