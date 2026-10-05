@@ -6,7 +6,80 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel superseded runs on the same ref: this repo is small and a stale run is
+# never useful.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fails CI on warnings anywhere, which is what makes the lint table in
+  # Cargo.toml load-bearing rather than decorative.
+  RUSTFLAGS: -D warnings
+
 jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: rustup show
+        run: rustup show active-toolchain
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo test
+        run: cargo test --workspace --all-features --locked
+
+  doc:
+    name: doc
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+  # The crate declares rust-version 1.97 and pins an exact channel in
+  # rust-toolchain.toml. This job checks the *minimum* declared version still
+  # builds, which is a different promise from "the pinned version builds".
+  msrv:
+    name: msrv (1.97)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - name: cargo check
+        run: cargo check --workspace --all-targets --all-features --locked
+
+  # ADR-0009: `cargo add cuda-oxide` would silently pull a GPL-3.0 crate into an
+  # Apache-2.0 tree, because the crates.io crate of that name is an unrelated
+  # abandoned 2021 project and NVIDIA's lives on git under a different name. The
+  # permit policy in deny.toml already fails on GPL-3.0, but only once the
+  # dependency is committed. This job is the check that catches it in the pull
+  # request that would introduce it.
+  #
+  # It is deliberately a policy gate on the manifest rather than a licence check,
+  # because the failure being guarded against is a bad *name*, which no licence
+  # scanner can see: `cuda-oxide` and NVIDIA's `cuda-rust` are different crates
+  # with the same prefix.
   dependency-policy:
     name: dependency policy
     runs-on: ubuntu-latest
@@ -18,3 +91,27 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
       - name: cargo deny
         run: cargo deny check
+      - name: no NVIDIA crates by crates.io name
+        run: |
+          set -o pipefail
+          if grep -rn --include=Cargo.toml --include='Cargo.lock' \
+              -E '^\s*(cuda-oxide|cutile-rs|cudarc)\s*=' .; then
+            echo "::error::a NVIDIA crate was added by a crates.io name. \
+              cuda-oxide on crates.io is an unrelated GPL-3.0 squatter; NVIDIA's is \
+              NVIDIA/cuda-rust on git. cutile-rs is a repository name, not a crate. \
+              See ADR-0009 and ADR-0010."
+            exit 1
+          fi
+          echo "no crates.io-name NVIDIA dependency"
+      - name: the default feature set carries no GPU backend
+        run: |
+          set -o pipefail
+          # ADR-0008: CubeCL is default-off, so the portable GPU path must not
+          # appear in a default build. A dependency that is default-on defeats the
+          # point of the decision even though the decision is still "recorded".
+          if cargo tree --workspace --depth 1 | grep -E 'cubecl|wgpu|cuda|cutile'; then
+            echo "::error::a GPU backend reached the default feature set. \
+              CubeCL must stay behind a default-off feature; see ADR-0008."
+            exit 1
+          fi
+          echo "the default build carries no GPU backend"
