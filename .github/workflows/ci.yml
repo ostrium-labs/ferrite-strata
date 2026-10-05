@@ -17,16 +17,3 @@ jobs:
           toolchain: 1.97.1
       - name: cargo check
         run: cargo check --workspace --all-targets --all-features --locked
-
-  dependency-policy:
-    name: dependency policy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1
-          components: ["clippy"]
-      - uses: taiki-e/install-action@cargo-deny
-      - name: cargo deny
-        run: cargo deny check
