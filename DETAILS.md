@@ -6,7 +6,8 @@ Everything known about this project in one place. Companion documents:
 - `docs/adr/` — 15 accepted architecture decision records
 - `../ferrite-lithic/DETAILS.md` — the companion hardware DSL, and the ASIC competition chip
 
-Status: **Phase 0 complete**, ABI settled, no crates published yet.
+Status: **Phase B1 in progress** — core IR, partitioning, CPU reference and host
+execution implemented and tested; C ABI plugin and `torch.compile` are not started.
 
 ## 1. What it is
 
@@ -315,10 +316,37 @@ writer.
 | Phase | Deliverable |
 |---|---|
 | 0 | Design notes, naming and ABI settled — **done** |
-| B1 | Strata traits, graph IR, CPU reference, optional CubeCL |
+| B1 | Strata traits, graph IR, CPU reference, optional CubeCL — **core done**; CubeCL not started |
 | B2 | C ABI plugin plus a separately built sample closed plugin |
 | B3 | `torch.compile` entry point, `cutile` backend |
 | bridge | Lithic FPGA backend through the Strata ABI |
+
+### What B1 landed
+
+Three crates, 161 tests, no clippy warnings:
+
+| Crate | Contents |
+|---|---|
+| `ferrite-strata` | `dtype`, `shape`, `attrs`, `graph` (+ `GraphBuilder`, `Graph::subgraph`), `arena`, `id`, `error`, `capabilities`, `backend`, `partition` |
+| `ferrite-strata-cpu` | `f32` reference kernels, and the decline path a real vendor plugin is not available to test |
+| `ferrite-strata-runtime` | `Session` → `Plan` → `Step` → `run`, with host fallback |
+
+Two design positions were **revised** during implementation, and both are worth
+recording because the original reasoning looked sound:
+
+1. **The value arena belongs in the core crate, not the runtime.** It was first
+   deferred to B2 as "a plugin-ABI question". That made `compile` return an object
+   with no way to run it, and the fix was a second design rather than a narrow one.
+   B2 now widens the arena; it does not introduce it.
+2. **The `Executable::run` boundary is an arena, not in/out parameters.** A partition's
+   boundary values are shared with its neighbours, and copying them out and back in
+   per step is where a multi-partition run picks up a stale boundary value.
+
+Also settled by implementation rather than by argument: `Op` carries no typed fields
+per op (attributes are the parameter channel, so an unknown key is *skipped* rather
+than a parse failure), and the partitioner's growth is **per backend**, because a
+partition is compiled by exactly one backend and must be acceptable to that one
+backend alone.
 
 **Inference only.** Non-goals: replacing CUDA/cuDNN/cuBLAS on NVIDIA, training
 support, and any general Rust-to-FPGA path. Fast-moving LLM ops are handled by

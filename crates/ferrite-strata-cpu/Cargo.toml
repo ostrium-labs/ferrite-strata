@@ -1,0 +1,15 @@
+[package]
+name = "ferrite-strata-cpu"
+description = "Reference CPU backend for the Ferrite Strata runtime, and the oracle every other backend is checked against"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ferrite-strata.workspace = true

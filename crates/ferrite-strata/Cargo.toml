@@ -1,0 +1,17 @@
+[package]
+name = "ferrite-strata"
+description = "Graph IR, backend traits and partitioning for the Ferrite Strata vendor-neutral accelerator runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1.11"

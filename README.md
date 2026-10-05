@@ -7,9 +7,19 @@ kernels without exposing their architecture.
 Status
 ------
 
-**Phase 0 (design).** No crates are published yet. The interface and ABI
-decisions are in `docs/design-notes.md`; the crate layout below is the intended
-shape.
+**Phase B1, core implemented.** Three crates build and test: the graph IR and
+backend traits, the CPU reference backend, and the host runtime. The C ABI
+plugin (`B2`) and the `torch.compile` entry point (`B3`) are not started, and
+no crates are published yet.
+
+```console
+$ cargo test --workspace     # 173 tests
+$ cargo clippy --workspace --all-targets -- -D warnings
+```
+
+What works today is the whole loop from graph to numbers: build a graph, plan it
+across registered backends, compile the partitions, run them, and fall back to
+the host for anything no backend will take.
 
 The idea
 --------
@@ -36,28 +46,68 @@ Crate layout
 
 | Crate | Purpose | Phase |
 |---|---|---|
-| `ferrite-strata` | Graph IR, `Backend`/`Executable` traits, partitioning | B1 |
-| `ferrite-strata-runtime` | Host runtime: buffers, streams, execution | B1 |
+| `ferrite-strata` | Graph IR, `Backend`/`Executable` traits, capabilities, partitioning | B1 **done** |
+| `ferrite-strata-runtime` | Host execution: session, plan, compile, run | B1 **done** |
+| `ferrite-strata-cpu` | CPU reference backend: the correctness oracle for every op | B1 **done** |
+| `ferrite-strata-cubecl` | Portable GPU path via CubeCL (wgpu/CUDA/ROCm/Metal) | B1 not started |
 | `ferrite-strata-plugin-api` | `#[repr(C)]` versioned vtable, `dlopen` loader, safe wrapper | B2 |
-| `ferrite-strata-cpu` | CPU reference backend: the correctness oracle for every op | B1 |
-| `ferrite-strata-cubecl` | Portable GPU path via CubeCL (wgpu/CUDA/ROCm/Metal) | B1 |
 | `ferrite-strata-pytorch` | `torch.compile` entry point, via PyO3 | B3 |
 
-Interface sketch
-----------------
+The interface, as implemented
+----------------------------
 
 ```rust
 pub trait Backend: Send + Sync {
     fn name(&self) -> &str;
-    fn capabilities(&self) -> Capabilities;   // dtypes, ops, fused patterns, memory, collectives
-    fn alloc(&self, bytes: usize, align: usize) -> Result<DeviceBuffer>;
-    fn compile(&self, graph: &Subgraph, opts: &CompileOpts) -> Result<Box<dyn Executable>>;
+    fn plugin_version(&self) -> PluginVersion;
+    fn capabilities(&self) -> &StrataSupport;
+
+    /// The pull query: can this backend take this pattern, for this dtype and
+    /// shape class? Answered *before* compiling, which is what makes a partition
+    /// plannable. PJRT has no equivalent; Burn can only run a search.
+    fn supports(&self, pattern_id: &str, dtype: DType, shape_class: ShapeClass) -> SupportLevel;
+
+    /// Compile. Three outcomes, and the middle one is the design.
+    fn compile(&self, subgraph: &Graph, pattern_id: &str) -> Result<CompileOutcome, Error>;
 }
 
-pub trait Executable: Send + Sync {
-    fn run(&self, stream: &Stream, inputs: &[BufferRef], outputs: &[BufferMut]) -> Result<()>;
+pub enum CompileOutcome {
+    Compiled(Box<ExecutableId>),
+    Declined { backend: String, reason: String },   // not an error
+}
+
+pub trait Executable: Send {
+    fn label(&self) -> &str;
+    fn graph(&self) -> &Graph;
+    fn outputs(&self) -> &[ValueId];
+    fn run(&self, arena: &mut Arena) -> Result<(), Error>;
 }
 ```
+
+Two things in there are the whole project:
+
+**Decline is not an error.** A backend that has no way to say "not mine" accepts
+everything and fails at run time, or refuses everything and cannot be used at
+all. Both prior arts had to retrofit this: PyTorch/XLA with a tri-state lowering
+step, Burn with `is_refusal()` bolted onto an error type that had no room for
+it. Here it is a third arm of the return type, so declining is cheaper than
+pretending and a planner can route around it.
+
+**The query is a pull.** `supports` is asked before compiling, so a partition can
+be costed rather than discovered.
+
+Host fallback is not a fallback plan
+------------------------------------
+
+A graph no backend fully supports still runs. Nodes that fall to
+`Placement::Host` are computed on the CPU in the same arena, so the numbers are
+the ones a fully-accelerated run would produce — a node on the host costs time
+and nothing else.
+
+That is the practical payoff of treating decline as a first-class outcome. One
+unsupported op is the normal case for a young backend, and refusing to run
+until everything is supported is why most frameworks end up with a single
+fused-everything path and no fallback at all.
 
 Rust has no stable ABI, so trait objects cannot cross a closed-source library
 boundary. The plugin boundary is a versioned `#[repr(C)]` vtable loaded with

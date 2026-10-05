@@ -1,0 +1,22 @@
+[package]
+name = "ferrite-strata-runtime"
+description = "Host-side execution for the Ferrite Strata runtime: planning, compiling and running a partitioned graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ferrite-strata.workspace = true
+
+# A dev-dependency, not a dependency. The runtime must work with no backends at all —
+# that is the configuration a framework starts in before a plugin loads — so it cannot
+# depend on one. It appears here so the examples and tests can exercise the real
+# register-plan-compile-run path rather than a mock of it.
+[dev-dependencies]
+ferrite-strata-cpu.workspace = true

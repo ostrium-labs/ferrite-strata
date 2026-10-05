@@ -1,0 +1,40 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/ostrium-labs/ferrite-strata"
+authors = ["Dinakaran V <112177746+dina-kar@users.noreply.github.com>"]
+
+[workspace.dependencies]
+ferrite-strata = { path = "crates/ferrite-strata", version = "0.0.1" }
+ferrite-strata-runtime = { path = "crates/ferrite-strata-runtime", version = "0.0.1" }
+ferrite-strata-cpu = { path = "crates/ferrite-strata-cpu", version = "0.0.1" }
+
+[workspace.lints.rust]
+# `deny`, deliberately not `forbid`. `forbid` cannot be overridden by a local
+# `#[allow]` at all, which would make it impossible to write the `dlopen` FFI in
+# ferrite-strata-plugin-api, or any raw-memory fast path in a backend, even with
+# a written justification. `deny` still requires an explicit, greppable opt-out at
+# every site, so `unsafe` stays reviewable rather than becoming ambient.
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+# `warn`, not `deny`. Numeric kernels and reference backends legitimately unwrap:
+# in `const` contexts, in tests where a failure should panic loudly, and where an
+# operation is infallible by construction. Library code should still prefer
+# `expect` with a message so a panic says what went wrong; test files opt out
+# explicitly at the top of the file rather than weakening this globally.
+unwrap_used = "warn"
+
+[profile.dev]
+debug = "line-tables-only"

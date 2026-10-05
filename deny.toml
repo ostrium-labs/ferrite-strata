@@ -1,0 +1,41 @@
+# cargo-deny configuration. See https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licences only. Anything that is not on this list has to be argued
+# for in a pull request, which is the point of having the list.
+#
+# This is the policy for the whole suite, not a description of what the crates
+# happen to depend on today. The crates currently have no runtime dependencies, so
+# cargo-deny reports several entries as "not encountered"; that is expected, and
+# the entries stay so that adding a dependency never requires editing this file.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[bans]
+# Duplicate versions are a fact of life in a transitive graph; failing on them
+# produces churn without finding vulnerabilities.
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
