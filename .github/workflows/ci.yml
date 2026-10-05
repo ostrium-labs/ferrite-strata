@@ -7,13 +7,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  msrv:
-    name: msrv (1.97)
+  fmt:
+    name: fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.97.1
-      - name: cargo check
-        run: cargo check --workspace --all-targets --all-features --locked
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+  dependency-policy:
+    name: dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@cargo-deny
+      - name: cargo deny
+        run: cargo deny check
