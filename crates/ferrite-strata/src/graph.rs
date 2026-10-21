@@ -28,7 +28,7 @@
 //! dtype/shape of every value, and which nodes feed which. A vendor is free to
 //! accept, decline, or fuse.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::attrs::Attributes;
 use crate::dtype::DType;
@@ -241,7 +241,12 @@ impl Node {
 ///
 /// Not `Clone`-cheap for large graphs and not meant to be; the partitioner moves
 /// subgraphs out of it and the compiler wants the original to stay put.
-#[derive(Clone, Debug, Default)]
+///
+/// `PartialEq` because a graph is compared for equality in tests and in the
+/// subgraph cache, and because the plugin ABI needs it to prove a subgraph
+/// survived the wire round trip. `PartialEq` rather than `Eq` because
+/// [`Op::LayerNorm`] carries an `f32` epsilon.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Graph {
     nodes: Vec<Node>,
     values: Vec<Value>,
@@ -499,6 +504,106 @@ impl Graph {
         graph.outputs = published;
 
         Ok((graph, back))
+    }
+
+    /// Rebuild a graph from its four arenas, as a wire blob decodes to.
+    ///
+    /// The counterpart to [`GraphBuilder`], for the case where the graph was
+    /// produced somewhere else — by a vendor, or by a previous run read back out
+    /// of a cache. The fields are `pub` on [`Node`] and [`Value`] but the arenas
+    /// themselves are private, so this is the only way to assemble a graph the
+    /// builder did not create.
+    ///
+    /// Validation is the same validation the builder does, because a blob from a
+    /// plugin is exactly as untrustworthy as a struct literal: ids must be in
+    /// range, names must be unique, and a node must not read a value no earlier
+    /// node produces.
+    ///
+    /// # Errors
+    ///
+    /// Any [`GraphError`] describing why `nodes` is not a well-formed arena list.
+    pub fn from_parts(
+        nodes: Vec<Node>,
+        values: Vec<Value>,
+        outputs: Vec<ValueId>,
+        name: impl Into<String>,
+    ) -> Result<Self, GraphError> {
+        let mut names: HashSet<&str> = HashSet::with_capacity(nodes.len() + values.len());
+        for node in &nodes {
+            if !names.insert(node.name.as_str()) {
+                return Err(GraphError::DuplicateName {
+                    name: node.name.as_str().to_string(),
+                });
+            }
+            if node.op.is_source() && !node.inputs.is_empty() {
+                return Err(GraphError::UnknownValue { id: node.inputs[0] });
+            }
+        }
+        for value in &values {
+            if !names.insert(value.name.as_str()) {
+                return Err(GraphError::DuplicateName {
+                    name: value.name.as_str().to_string(),
+                });
+            }
+            if let Some(producer) = value.producer
+                && usize::try_from(producer.0).map_or(true, |i| i >= nodes.len())
+            {
+                return Err(GraphError::UnknownNode { id: producer });
+            }
+        }
+
+        let mut produced: HashSet<ValueId> = HashSet::with_capacity(values.len());
+        // A value with no producer is a graph input, and it exists before any node
+        // does. Seeding the set here is what lets the `Op::Input` node that
+        // introduces it validate as the source it is, rather than as a read of a
+        // value nothing has produced yet.
+        for (index, value) in values.iter().enumerate() {
+            if value.producer.is_none() {
+                produced.insert(ValueId(index as u32));
+            }
+        }
+        for node in &nodes {
+            for &input in &node.inputs {
+                let in_range = usize::try_from(input.0)
+                    .ok()
+                    .is_some_and(|i| i < values.len());
+                if !in_range {
+                    return Err(GraphError::UnknownValue { id: input });
+                }
+                if !produced.contains(&input) {
+                    return Err(GraphError::UseBeforeDefinition { id: input });
+                }
+            }
+            for &out in &node.outputs {
+                let in_range = usize::try_from(out.0)
+                    .ok()
+                    .is_some_and(|i| i < values.len());
+                if !in_range {
+                    return Err(GraphError::UnknownValue { id: out });
+                }
+                produced.insert(out);
+            }
+        }
+
+        let mut seen_outputs: HashSet<ValueId> = HashSet::with_capacity(outputs.len());
+        for &out in &outputs {
+            let in_range = usize::try_from(out.0)
+                .ok()
+                .is_some_and(|i| i < values.len());
+            if !in_range {
+                return Err(GraphError::UnknownValue { id: out });
+            }
+            if !seen_outputs.insert(out) {
+                return Err(GraphError::DuplicateOutput { id: out });
+            }
+        }
+
+        Ok(Self {
+            nodes,
+            values,
+            outputs,
+            name: name.into(),
+        })
     }
 }
 

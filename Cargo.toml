@@ -14,6 +14,7 @@ authors = ["Dinakaran V <112177746+dina-kar@users.noreply.github.com>"]
 ferrite-strata = { path = "crates/ferrite-strata", version = "0.0.1" }
 ferrite-strata-runtime = { path = "crates/ferrite-strata-runtime", version = "0.0.1" }
 ferrite-strata-cpu = { path = "crates/ferrite-strata-cpu", version = "0.0.1" }
+ferrite-strata-plugin-api = { path = "crates/ferrite-strata-plugin-api", version = "0.0.1" }
 
 [workspace.lints.rust]
 # `deny`, deliberately not `forbid`. `forbid` cannot be overridden by a local

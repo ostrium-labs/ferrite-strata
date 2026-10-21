@@ -66,6 +66,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ferrite-strata-plugin-api"
+version = "0.0.1"
+dependencies = [
+ "ferrite-strata",
+ "libc",
+]
+
+[[package]]
 name = "ferrite-strata-runtime"
 version = "0.0.1"
 dependencies = [

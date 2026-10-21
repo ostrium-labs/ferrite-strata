@@ -1,0 +1,24 @@
+[package]
+name = "ferrite-strata-plugin-api"
+description = "The C ABI a Ferrite Strata vendor plugin implements, and the host side that loads one"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["ffi", "abi", "plugin", "accelerator", "inference"]
+categories = ["api-bindings", "external-ffi-api"]
+# Deliberately no `crate-type` key: this crate is an rlib only. It is never itself
+# a cdylib, because the *plugin* is the shared object, and a crate that was both
+# would export its own symbols into the plugin's namespace — which is precisely
+# the coupling the ABI exists to break.
+
+[dependencies]
+ferrite-strata = { workspace = true }
+# `dlopen`/`dlsym`/`dlclose`. MIT, on the allow list. Declared here rather than
+# hand-written as `extern "C"` so the signatures are the real ones.
+libc = "0.2"
+
+[lints]
+workspace = true

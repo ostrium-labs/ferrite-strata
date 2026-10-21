@@ -363,6 +363,29 @@ impl DTypeMask {
         Self(mask)
     }
 
+    /// The raw bits, for a wire format or a cache key.
+    ///
+    /// The bit for an element type is its position in [`ElementType::all`], which
+    /// is why the plugin ABI is free to assign its own `#[repr(u32)]` tags: two
+    /// vocabularies, one bit each, no coupling.
+    #[must_use]
+    pub const fn to_bits(self) -> u32 {
+        self.0
+    }
+
+    /// Rebuild from raw bits.
+    ///
+    /// Bits above [`ElementType::all`] are *kept* rather than dropped. A plugin
+    /// from a newer minor can advertise an element type this build has never
+    /// heard of, and a host that discarded the bit would then answer
+    /// `can_store` wrongly for every dtype it does know once that plugin comes
+    /// back. Keeping it means the mask round-trips and the unknown bit is simply
+    /// never queried.
+    #[must_use]
+    pub const fn from_bits(bits: u32) -> Self {
+        Self(bits)
+    }
+
     /// Whether `element` is in the mask.
     #[must_use]
     pub const fn contains(self, element: ElementType) -> bool {
